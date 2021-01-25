@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>3up3dn</title>
+        <link rel="stylesheet" href="/static/styles.css">
+    </head>
+    <body>
+        <h1>3up3dn</h1>
+        <h4>Your Name: <span id="player_name"></span></h4>
+        <pre id="board"></pre>
+        <hr>
+        <pre id="prompt">Enter your name. (A good one, because you can't change it).</pre>
+        <form action="" onsubmit="submit_form(event)" id="form">
+            <input type="text" id="message_text" autocomplete="off"/>
+            <button>Send</button>
+        </form>
+        <script>
+            // to be filled in by submit_form()
+            var websocket = null;
+            
+            function submit_form(event) {
+                // Called upon form submit
+                var input = document.getElementById("message_text");
+                var msg = input.value;
+                
+                if (!websocket) {
+                    // A name was entered. Create a websocket for it
+                    document.querySelector("#player_name").textContent = msg;
+                    websocket = new WebSocket(`ws://localhost:8000/ws/${msg}`);
+                    websocket.onmessage = default_onmessage;
+                    document.getElementById("prompt").innerHTML = "";
+                    console.log(`set name to '${msg}'`)
+                } else {
+                    // Send the msg over the websocket
+                    websocket.send(msg);
+                    console.log(`sent '${msg}'`);
+                }
+                
+                // clean up
+                input.value = '';
+                event.preventDefault();
+            };
+            
+            function default_onmessage(event) {
+                console.log(`got message ${event.data}`);
+                payload = JSON.parse(event.data);
+                if (payload.target == "enable_form") {
+                    toggle_form(false);
+                } else if (payload.target == "disable_form") {
+                    toggle_form(true);
+                } else {
+                    document.getElementById(payload.target).innerHTML = payload.text;
+                }
+            };
+            
+            function toggle_form(disabled) {
+                var form = document.getElementById("form");
+                var elements = form.elements;
+                for (var i = 0, len = elements.length; i < len; ++i) {
+                    elements[i].disabled = disabled;
+                }
+                console.log(`${disabled? "disabled" : "enabled"} the form`)
+            }
+        </script>
+    </body>
+</html>

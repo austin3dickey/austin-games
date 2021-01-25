@@ -1,7 +1,13 @@
+import asyncio
 import random
-import time
 import traceback
+from functools import partial
 from typing import Union, Optional
+
+from fastapi import WebSocket
+
+from .communication import update_prompt, enable_form, disable_form
+
 
 ALL_CARDS = {1: 3, 2: 3, 3: 3, 4: 3, 5: 3, 6: 3, 7: 3, 8: 3, 9: 3, 10: 3, "C": 3, "C+1": 3, "C+2": 1}
 
@@ -58,12 +64,19 @@ class Card:
 class Cards(list):
     """A pile of cards."""
 
-    def choose(
-        self, prompt: str, min_num: int, max_num: int, playing_faceup: bool, min_card: Optional[Card]
+    async def choose(
+        self,
+        websocket: WebSocket,
+        prompt: str,
+        min_num: int,
+        max_num: int,
+        playing_faceup: bool,
+        min_card: Optional[Card],
     ) -> Optional["Cards"]:
         """Ask for the cards to choose and validate they work before popping them out of the pile.
 
         Args:
+            websocket: The player's websocket
             prompt: A prompt for the cards to choose
             min_num: The minimum number of cards to choose
             max_num: The maximum number of cards to choose
@@ -73,18 +86,24 @@ class Cards(list):
         Returns:
             Cards that were chosen, or None if the player must pick up the discard pile
         """
+        send = partial(update_prompt, websocket=websocket)
+
         # Exit early if nothing is playable
         if min_card and playing_faceup and all(card < min_card for card in self):
-            print("Uh-oh, none of your cards are playable! Picking up the discard pile...")
-            time.sleep(2)
+            await send("Uh-oh, none of your cards are playable! Picking up the discard pile...")
+            await asyncio.sleep(2)
+            await send("")
             return None
 
+        await send(prompt)
         while True:
-            indexes = input(f"{prompt}: ").strip()
+            await enable_form(websocket)
+            indexes = await websocket.receive_text()
+            await disable_form(websocket)
             try:
-                parsed = {int(ix) - 1 for ix in indexes.split(" ")}
+                parsed = {int(ix) - 1 for ix in indexes.strip().split(" ")}
             except ValueError:
-                print("Your input must be space-separated integers (ex: '1 2')")
+                await send(prompt + "\nYour input must be space-separated integers (ex: '1 2')")
                 continue
 
             # Make a bunch of assertions about the chosen cards
@@ -108,27 +127,23 @@ class Cards(list):
                     else:
                         # Playing from 3dn
                         if cards[0] < min_card:
-                            print(
-                                f"You picked {cards[0]} but it needs to be equal to or bigger than "
-                                f"{min_card}! Picking up the discard pile..."
+                            await send(
+                                f"\nYou picked {cards[0]} but it needs to be equal to or bigger "
+                                f"than {min_card}! Picking up the discard pile...",
                             )
                             self.hidden_indexes = [
                                 ix for ix in self.hidden_indexes if ix != next(iter(parsed))
                             ]
-                            time.sleep(2)
+                            await asyncio.sleep(2)
+                            await send("")
                             return None
 
                 # If assertions pass, exit the while loop
                 break
             except AssertionError as e:
-                print(e.args[0])
-            except Exception as e:
-                print(
-                    "Yikes, something went terribly wrong. The game might not be playable but you "
-                    "can try something else if you like. Please send this long message to Austin:\n\n"
-                )
-                traceback.print_tb(e.__traceback__)
+                await send(prompt + "\n" + e.args[0])
 
+        await send("")
         return Cards(self.pop(ix) for ix in sorted(parsed, reverse=True))
 
     def display(self, hide_indexes: list[int]) -> str:
@@ -141,9 +156,9 @@ class Cards(list):
             A string representation of the pile of cards
         """
         if len(self) == 0:
-            return "<empty>"
+            return "< empty >"
         elif hide_indexes and len(self) > 6:
-            return f"<{len(self)} cards>"
+            return f"< {len(self)} cards >"
         else:
             return " ".join(
                 "[~]" if ix in hide_indexes else str(card) for ix, card in enumerate(self)
