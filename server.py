@@ -4,13 +4,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from austingames import disable_form, threeupthreedown_game, update_board, update_prompt
+from austingames.threeupthreedown.communication import Communicator
+from austingames.threeupthreedown.game import Game
 
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-game = threeupthreedown_game()
+game = Game()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -22,45 +23,51 @@ async def get():
 @app.websocket("/ws/{player_name}")
 async def websocket_endpoint(websocket: WebSocket, player_name: str):
     await websocket.accept()
+    comms = Communicator(websocket)
+
     try:
+        # handle a game already in play
         if game.is_playing and player_name not in game.players:
-            await update_prompt("A game is being played. Please try again later.", websocket)
+            await comms.update_prompt("A game is being played. Please try again later.")
             return
         elif game.is_playing:
-            game.players[player_name].websocket = websocket
+            game.players[player_name].comms = comms
             await game.broadcast_board()
             await game.broadcast_waiting_prompt()
             while True:
+                # play as non-VIP
                 await asyncio.sleep(1000)
-        else:
-            is_vip = False
-            if not game.players:
-                is_vip = True
-                await update_prompt("Start the game by entering 'go' here", websocket)
-            else:
-                await disable_form(websocket)
-        
-            game.add_player(name=player_name, is_vip=is_vip, websocket=websocket)
-            current_players = "\n".join(
-                name + " (VIP)" if player.is_vip else name for name, player in game.players.items()
+
+        # game hasn't started yet; set it up
+        is_vip = not game.players
+        if is_vip:
+            await comms.update_prompt("Start the game when everyone has joined!")
+            await comms.enable_vip_form()
+
+        game.add_player(name=player_name, is_vip=is_vip, comms=comms)
+        current_players = "\n".join(
+            name + " (VIP)" if player.is_vip else name for name, player in game.players.items()
+        )
+
+        for player in game.players.values():
+            await player.comms.update_board(
+                f"Waiting for VIP to start the game. Current players:\n\n{current_players}",
             )
+
+        # wait for VIP to kick it off
+        if is_vip:
+            await websocket.receive_text()
+            await comms.update_prompt("")
+            win_msg = await game.play()
             for player in game.players.values():
-                await update_board(
-                    f"Waiting for VIP to start the game. Current players:\n\n{current_players}",
-                    player.websocket
-                )
-        
-            # wait for VIP to kick it off
-            if is_vip:
-                while True:
-                    data = await websocket.receive_text()
-                    if data == "go":
-                        await update_prompt("", websocket)
-                        await disable_form(websocket)
-                        await game.play()
-                        game.reset_game()
-            else:
-                while True:
-                    await asyncio.sleep(1000)
+                await player.comms.update_prompt(win_msg + " Refresh page to start again :)")
+            game.reset_game()
+        else:
+            while True:
+                # play as non-VIP
+                await asyncio.sleep(1000)
+
     except WebSocketDisconnect:
+        if not game.is_playing:
+            game.players.pop(player_name, None)
         print(f"{player_name} disconnected, waiting for them to come back")

@@ -6,61 +6,111 @@
     </head>
     <body>
         <h1>3up3dn</h1>
-        <h4>Your Name: <span id="player_name"></span></h4>
-        <pre id="board"></pre>
-        <hr>
+        <h3>Your Name: <span id="player_name"></span></h3>
         <pre id="prompt">Enter your name. (A good one, because you can't change it).</pre>
-        <form action="" onsubmit="submit_form(event)" id="form">
+        <form action="" onsubmit="submit_name(event)" id="name_form">
             <input type="text" id="message_text" autocomplete="off"/>
-            <button>Send</button>
+            <button>Join Game</button>
         </form>
+        <form action="" onsubmit="start_game(event)" id="vip_form" style="display:none">
+            <button>Start Game</button>
+        </form>
+        <form action="" onsubmit="submit_cards(event)" id="card_form" style="display:none"></form>
+        <hr>
+        <pre id="board"></pre>
         <script>
-            // to be filled in by submit_form()
+            // to be filled in by submit_name()
             var websocket = null;
-            
-            function submit_form(event) {
-                // Called upon form submit
-                var input = document.getElementById("message_text");
-                var msg = input.value;
+
+            function submit_name(event) {
+                console.log("entered submit_name()")
+                var name = document.getElementById("message_text").value;
+                document.querySelector("#player_name").textContent = name;
                 
-                if (!websocket) {
-                    // A name was entered. Create a websocket for it
-                    document.querySelector("#player_name").textContent = msg;
-                    websocket = new WebSocket(`ws://localhost:8000/ws/${msg}`);
-                    websocket.onmessage = default_onmessage;
-                    document.getElementById("prompt").innerHTML = "";
-                    console.log(`set name to '${msg}'`)
-                } else {
-                    // Send the msg over the websocket
-                    websocket.send(msg);
-                    console.log(`sent '${msg}'`);
-                }
+                // Hide the form and clear the prompt
+                document.getElementById("name_form").style.display = "none";
+                document.getElementById("prompt").innerHTML = "";
                 
-                // clean up
-                input.value = '';
+                // Create a websocket for this name
+                websocket = new WebSocket(`ws://localhost:8000/ws/${name}`);
+                websocket.onmessage = default_onmessage;
+                
                 event.preventDefault();
             };
-            
-            function default_onmessage(event) {
-                console.log(`got message ${event.data}`);
-                payload = JSON.parse(event.data);
-                if (payload.target == "enable_form") {
-                    toggle_form(false);
-                } else if (payload.target == "disable_form") {
-                    toggle_form(true);
-                } else {
-                    document.getElementById(payload.target).innerHTML = payload.text;
-                }
+
+            function start_game(event) {
+                console.log("entered start_game()")
+                websocket.send("go time");
+                
+                // Hide the form
+                document.getElementById("vip_form").style.display = "none";
+                
+                event.preventDefault();
             };
-            
-            function toggle_form(disabled) {
-                var form = document.getElementById("form");
-                var elements = form.elements;
-                for (var i = 0, len = elements.length; i < len; ++i) {
-                    elements[i].disabled = disabled;
-                }
-                console.log(`${disabled? "disabled" : "enabled"} the form`)
-            }
+
+            function submit_cards(event) {
+                console.log("entered submit_cards()")
+                const checked_boxes = document.querySelectorAll('input[name=checkboxes]:checked');
+                var checked_indexes = [];
+                for (i = 0; i < checked_boxes.length; i++) {
+                    checked_indexes.push(checked_boxes[i].value);
+                };
+                console.log(`sending ${checked_indexes}`)
+                websocket.send(checked_indexes);
+                
+                // remove everything
+                var form = document.getElementById("card_form");
+                while (form.firstChild) {
+                    form.removeChild(form.lastChild);
+                };
+                
+                event.preventDefault();
+            };
+
+            function default_onmessage(event) {
+                console.log("entered default_onmessage()")
+                // Dispatch various commands from the server
+                payload = JSON.parse(event.data);
+                console.log(event.data)
+                if (payload.target == "enable_vip_form") {
+                    console.log("enabling vip form")
+                    document.getElementById("vip_form").style.display = "block";
+                    console.log("done enabling vip form")
+                } else if (payload.target == "enable_card_form") {
+                    document.getElementById("card_form").style.display = "block";
+                } else if (payload.target == "populate_cards") {
+                    populate_cards(payload.cards);
+                } else {
+                    console.log(`setting ${payload.target}`)
+                    // render an area of the screen defined by the target
+                    document.getElementById(payload.target).innerHTML = payload.text;
+                    console.log(`done setting ${payload.target}`)
+                };
+            };
+
+            function populate_cards(cards) {
+                console.log("entered populate_cards()")
+                var form = document.getElementById("card_form");
+                
+                // add the cards
+                for (i = 0; i < cards.length; ++i) {
+                    var checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.name = "checkboxes";
+                    checkbox.value = i;
+                    
+                    var label = document.createElement("label");
+                    label.appendChild(checkbox);
+                    label.appendChild(document.createTextNode(cards[i]));
+                    
+                    form.appendChild(label);
+                };
+                
+                // add the submit button
+                var button = document.createElement("button");
+                button.innerHTML = "Play";
+                form.appendChild(button);
+            };
         </script>
     </body>
 </html>

@@ -4,9 +4,7 @@ import traceback
 from functools import partial
 from typing import Union, Optional
 
-from fastapi import WebSocket
-
-from .communication import update_prompt, enable_form, disable_form
+from .communication import Communicator
 
 
 ALL_CARDS = {1: 3, 2: 3, 3: 3, 4: 3, 5: 3, 6: 3, 7: 3, 8: 3, 9: 3, 10: 3, "C": 3, "C+1": 3, "C+2": 1}
@@ -58,7 +56,7 @@ class Card:
         return hash(self.value)
 
     def __str__(self) -> str:
-        return f"[ {self.value} ]"
+        return f"[\u00A0{self.value}\u00A0]"
 
 
 class Cards(list):
@@ -66,7 +64,7 @@ class Cards(list):
 
     async def choose(
         self,
-        websocket: WebSocket,
+        comms: Communicator,
         prompt: str,
         min_num: int,
         max_num: int,
@@ -76,7 +74,7 @@ class Cards(list):
         """Ask for the cards to choose and validate they work before popping them out of the pile.
 
         Args:
-            websocket: The player's websocket
+            comms: The player's Communicator
             prompt: A prompt for the cards to choose
             min_num: The minimum number of cards to choose
             max_num: The maximum number of cards to choose
@@ -86,34 +84,25 @@ class Cards(list):
         Returns:
             Cards that were chosen, or None if the player must pick up the discard pile
         """
-        send = partial(update_prompt, websocket=websocket)
-
         # Exit early if nothing is playable
         if min_card and playing_faceup and all(card < min_card for card in self):
-            await send("Uh-oh, none of your cards are playable! Picking up the discard pile...")
+            await comms.update_prompt(
+                "Uh-oh, none of your cards are playable! Picking up the discard pile..."
+            )
             await asyncio.sleep(2)
-            await send("")
+            await comms.update_prompt("")
             return None
 
-        await send(prompt)
+        await comms.update_prompt(prompt)
+        await comms.populate_cards(self)
         while True:
-            await enable_form(websocket)
-            indexes = await websocket.receive_text()
-            await disable_form(websocket)
-            try:
-                parsed = {int(ix) - 1 for ix in indexes.strip().split(" ")}
-            except ValueError:
-                await send(prompt + "\nYour input must be space-separated integers (ex: '1 2')")
-                continue
+            indexes = await comms.receive_card_indexes()
 
             # Make a bunch of assertions about the chosen cards
             try:
-                assert len(parsed) >= min_num, f"Must enter at least {min_num} different indexes"
-                assert len(parsed) <= max_num, f"Must enter at most {max_num} different indexes"
-                assert (
-                    min(parsed) >= 0 and max(parsed) <= len(self) - 1
-                ), f"Indexes must be between 1 and {len(self)}"
-                cards = [self[ix] for ix in parsed]
+                assert len(indexes) >= min_num, f"Must select at least {min_num} card(s)"
+                assert len(indexes) <= max_num, f"Must select at most {max_num} card(s)"
+                cards = [self[ix] for ix in indexes]
                 if playing_faceup:
                     assert len(set(cards)) == 1, "If selecting multiple cards, they must be the same"
                     assert not (
@@ -127,24 +116,25 @@ class Cards(list):
                     else:
                         # Playing from 3dn
                         if cards[0] < min_card:
-                            await send(
+                            await comms.update_prompt(
                                 f"\nYou picked {cards[0]} but it needs to be equal to or bigger "
                                 f"than {min_card}! Picking up the discard pile...",
                             )
                             self.hidden_indexes = [
-                                ix for ix in self.hidden_indexes if ix != next(iter(parsed))
+                                ix for ix in self.hidden_indexes if ix != next(iter(indexes))
                             ]
                             await asyncio.sleep(2)
-                            await send("")
+                            await comms.update_prompt("")
                             return None
 
                 # If assertions pass, exit the while loop
                 break
             except AssertionError as e:
-                await send(prompt + "\n" + e.args[0])
+                await comms.update_prompt(prompt + "\n" + e.args[0])
+                await comms.populate_cards(self)
 
-        await send("")
-        return Cards(self.pop(ix) for ix in sorted(parsed, reverse=True))
+        await comms.update_prompt("")
+        return Cards(self.pop(ix) for ix in sorted(indexes, reverse=True))
 
     def display(self, hide_indexes: list[int]) -> str:
         """Display the cards. Some could be facedown.
@@ -160,9 +150,18 @@ class Cards(list):
         elif hide_indexes and len(self) > 6:
             return f"< {len(self)} cards >"
         else:
-            return " ".join(
-                "[~]" if ix in hide_indexes else str(card) for ix, card in enumerate(self)
-            )
+            return " ".join(self.display_list(hide_indexes))
+
+    def display_list(self, hide_indexes: list[int]) -> list[str]:
+        """Render the cards into a list of strings. Some could be facedown.
+
+        Args:
+            hide_indexes: List of indexes of facedown cards
+
+        Returns:
+            A list of string representations of the cards
+        """
+        return ["[~]" if ix in hide_indexes else str(card) for ix, card in enumerate(self)]
 
     def __str__(self) -> str:
         # display all cards faceup

@@ -2,23 +2,21 @@ import argparse
 import collections
 from typing import Optional
 
-from fastapi import WebSocket
-
 from .cards import Card, Cards, Deck, Discard, ThreeDown
-from .communication import update_board, update_prompt
+from .communication import Communicator
 
 
 class Player:
     """A player of the game."""
 
-    def __init__(self, is_vip: bool, websocket: WebSocket):
+    def __init__(self, is_vip: bool, comms: Communicator):
         """
         Args:
             is_vip: Whether they're the first player to join
-            websocket: The player's websocket
+            comms: The player's Communicator
         """
         self.is_vip = is_vip
-        self.websocket = websocket
+        self.comms = comms
         self.hand = Cards()
         self.three_up = Cards()
         self.three_down = ThreeDown()
@@ -26,8 +24,8 @@ class Player:
     async def place_three_up(self):
         """Before the game starts, choose cards to be your 3up"""
         cards = await self.hand.choose(
-            websocket=self.websocket,
-            prompt="Space-separated indexes of 3 cards to place as your 3up:",
+            comms=self.comms,
+            prompt="3 cards to place as your 3up:",
             min_num=3,
             max_num=3,
             playing_faceup=False,
@@ -47,8 +45,8 @@ class Player:
         """
         if self.hand:
             cards = await self.hand.choose(
-                websocket=self.websocket,
-                prompt="Space-separated indexes of card(s) to play:",
+                comms=self.comms,
+                prompt="Card(s) to play:",
                 min_num=1,
                 max_num=len(self.hand),
                 playing_faceup=True,
@@ -57,8 +55,8 @@ class Player:
             location = "hand"
         elif self.three_up:
             cards = await self.three_up.choose(
-                websocket=self.websocket,
-                prompt="Space-separated indexes of card(s) to play from your 3up:",
+                comms=self.comms,
+                prompt="Card(s) to play from your 3up:",
                 min_num=1,
                 max_num=len(self.three_up),
                 playing_faceup=True,
@@ -67,8 +65,8 @@ class Player:
             location = "3up"
         else:
             cards = await self.three_down.choose(
-                websocket=self.websocket,
-                prompt="Index of the card to play from your 3dn:",
+                comms=self.comms,
+                prompt="Card to play from your 3dn:",
                 min_num=1,
                 max_num=1,
                 playing_faceup=False,
@@ -144,16 +142,16 @@ class Game:
         self.discard = Discard()
         self.turn_log = TurnLog([], self.TURN_LOG_LENGTH)
 
-    def add_player(self, name: str, is_vip: bool, websocket: WebSocket):
+    def add_player(self, name: str, is_vip: bool, comms: Communicator):
         """
         Add a player to the game before it starts
 
         Args:
             name: The name of the player to add
             is_vip: Whether they're the first player to join
-            websocket: The player's websocket
+            comms: The player's Communicator
         """
-        self.players[name] = Player(is_vip, websocket)
+        self.players[name] = Player(is_vip, comms)
         self.players[name].add_to_hand(self.deck.deal(6))
         self.players[name].three_down += self.deck.deal(3)
 
@@ -189,13 +187,13 @@ Discard pile: {self.discard}
     async def broadcast_board(self):
         """Broadcast the views of the board to all players"""
         for player_name, player in self.players.items():
-            await update_board(self.board_view(player_name), player.websocket)
+            await player.comms.update_board(self.board_view(player_name))
 
     async def broadcast_waiting_prompt(self):
         """Broadcast the waiting prompt to all players whose turn it isn't"""
         for player_name, player in self.players.items():
             if player_name != self.current_turn:
-                await update_prompt(f"Waiting for {self.current_turn} to play", player.websocket)
+                await player.comms.update_prompt(f"Waiting for {self.current_turn} to play")
 
     async def everyone_place_three_up(self):
         """Before the game starts, everyone go around and place their 3up cards"""
@@ -255,12 +253,12 @@ Discard pile: {self.discard}
         Returns:
             The win message
         """
+        for player in self.players.values():
+            await player.comms.enable_card_form()
         self.is_playing = True
         await self.everyone_place_three_up()
         winning_msg = None
         while not winning_msg:
             winning_msg = await self.everyone_take_a_turn()
         self.is_playing = False
-        for player in self.players.values():
-            await update_prompt("Refresh page to start again :)", player.websocket)
         return winning_msg

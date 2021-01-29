@@ -1,14 +1,9 @@
 body {
-  background-color: powderblue;
-}
-h1 {
-  color: blue;
-  font-family: Trebuchet MS;
-}
-h4 {
-  color: blue;
-  font-family: Trebuchet MS;
+  font-family: monaco;
 }
 pre {
-  font-family: monaco;
+  white-space: pre-wrap;
+}
+button {
+    font-family : inherit;
 }
