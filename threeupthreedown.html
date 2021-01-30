@@ -32,7 +32,7 @@
                 document.getElementById("prompt").innerHTML = "";
                 
                 // Create a websocket for this name
-                websocket = new WebSocket(`ws://localhost:8000/ws/${name}`);
+                websocket = new WebSocket(`wss://austingames.azurewebsites.net/ws/${name}`);
                 websocket.onmessage = default_onmessage;
                 
                 event.preventDefault();

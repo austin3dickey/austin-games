@@ -1,6 +1,8 @@
 import argparse
 import collections
-from typing import Optional
+from typing import Optional, Tuple
+
+from websockets.exceptions import ConnectionClosed
 
 from .cards import Card, Cards, Deck, Discard, ThreeDown
 from .communication import Communicator
@@ -33,7 +35,7 @@ class Player:
         )
         self.three_up += cards
 
-    async def take_turn(self, top_discard_card: Card) -> tuple[Optional[Cards], str]:
+    async def take_turn(self, top_discard_card: Card) -> Tuple[Optional[Cards], str]:
         """Take a turn from one of your piles of cards.
 
         Args:
@@ -183,6 +185,19 @@ Discard pile: {self.discard}
 
 {self.turn_log}
                 """
+
+    async def broadcast(self, func_name: str, *args, **kwargs):
+        """Send a message to all players
+        
+        Args:
+            func_name: Name of the comms method to call
+            args, kwargs: Arguments to the method
+        """
+        for player in self.players.values():
+            try:
+                await getattr(player.comms, func_name)(*args, **kwargs)
+            except ConnectionClosed:
+                pass
 
     async def broadcast_board(self):
         """Broadcast the views of the board to all players"""

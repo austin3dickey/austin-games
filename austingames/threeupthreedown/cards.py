@@ -2,12 +2,14 @@ import asyncio
 import random
 import traceback
 from functools import partial
-from typing import Union, Optional
+from typing import List, Optional, Union
 
 from .communication import Communicator
 
 
-ALL_CARDS = {1: 3, 2: 3, 3: 3, 4: 3, 5: 3, 6: 3, 7: 3, 8: 3, 9: 3, 10: 3, "C": 3, "C+1": 3, "C+2": 1}
+SMALL = {1: 3, 2: 3, 3: 3, 4: 3, 5: 3, 6: 3, 7: 3, 8: 3, 9: 3, 10: 3, "C": 3, "C+1": 2, "C+2": 1}
+MEDIUM = {1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 5, 7: 5, 8: 5, 9: 5, 10: 5, "C": 5, "C+1": 4, "C+2": 1}
+LARGE = {1: 7, 2: 7, 7: 7, 4: 7, 5: 7, 6: 7, 7: 7, 8: 7, 9: 7, 10: 7, "C": 7, "C+1": 6, "C+2": 1}
 
 
 class Card:
@@ -136,7 +138,7 @@ class Cards(list):
         await comms.update_prompt("")
         return Cards(self.pop(ix) for ix in sorted(indexes, reverse=True))
 
-    def display(self, hide_indexes: list[int]) -> str:
+    def display(self, hide_indexes: List[int]) -> str:
         """Display the cards. Some could be facedown.
 
         Args:
@@ -152,7 +154,7 @@ class Cards(list):
         else:
             return " ".join(self.display_list(hide_indexes))
 
-    def display_list(self, hide_indexes: list[int]) -> list[str]:
+    def display_list(self, hide_indexes: List[int]) -> List[str]:
         """Render the cards into a list of strings. Some could be facedown.
 
         Args:
@@ -172,7 +174,7 @@ class Deck(Cards):
     """A deck of cards that can deal and shuffle."""
 
     def __init__(self):
-        super().__init__(Card(value) for value, num in ALL_CARDS.items() for _ in range(num))
+        super().__init__(Card(value) for value, num in LARGE.items() for _ in range(num))
         self.shuffle()
 
     def shuffle(self):

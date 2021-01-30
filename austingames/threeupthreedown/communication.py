@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Any, List
 
 from fastapi import WebSocket
 
@@ -64,7 +64,7 @@ class Communicator:
             }
         )
 
-    async def receive_card_indexes(self) -> list[int]:
+    async def receive_card_indexes(self) -> List[int]:
         """Receive card indexes from the client
 
         Returns:
