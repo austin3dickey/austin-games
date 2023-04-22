@@ -1,10 +1,10 @@
 import json
-from typing import Any, List
+from typing import List, TYPE_CHECKING
 
 from fastapi import WebSocket
 
-# avoid circular dependency for type hint
-Cards = None
+if TYPE_CHECKING:
+    from .cards import Cards
 
 
 class Communicator:
@@ -17,14 +17,18 @@ class Communicator:
         """
         self.websocket = websocket
 
+    async def send(self, stuff: dict):
+        """Send something with debug printing."""
+        print(f"sending {stuff}")
+        await self.websocket.send_json(stuff)
+
     async def update_prompt(self, msg: str):
         """Update the prompt section of the client
 
         Args:
             msg: The message to send
         """
-        print({"target": "prompt", "text": msg})
-        await self.websocket.send_json({"target": "prompt", "text": msg})
+        await self.send({"target": "prompt", "text": msg})
 
     async def update_board(self, msg: str):
         """Update the board section of the client
@@ -32,32 +36,23 @@ class Communicator:
         Args:
             msg: The message to send
         """
-        print({"target": "board", "text": msg})
-        await self.websocket.send_json({"target": "board", "text": msg})
+        await self.send({"target": "board", "text": msg})
 
     async def enable_vip_form(self):
         """Enable the VIP form"""
-        print({"target": "enable_vip_form"})
-        await self.websocket.send_json({"target": "enable_vip_form"})
+        await self.send({"target": "enable_vip_form"})
 
     async def enable_card_form(self):
         """Enable the card form"""
-        print({"target": "enable_card_form"})
-        await self.websocket.send_json({"target": "enable_card_form"})
+        await self.send({"target": "enable_card_form"})
 
-    async def populate_cards(self, cards: Cards):
+    async def populate_cards(self, cards: "Cards"):
         """Populate the card form
 
         Args:
             cards: The cards to populate it with
         """
-        print(
-            {
-                "target": "populate_cards",
-                "cards": cards.display_list(getattr(cards, "hidden_indexes", [])),
-            }
-        )
-        await self.websocket.send_json(
+        await self.send(
             {
                 "target": "populate_cards",
                 "cards": cards.display_list(getattr(cards, "hidden_indexes", [])),

@@ -1,7 +1,5 @@
 import asyncio
 import random
-import traceback
-from functools import partial
 from typing import List, Optional, Union
 
 from .communication import Communicator
@@ -106,7 +104,9 @@ class Cards(list):
                 assert len(indexes) <= max_num, f"Must select at most {max_num} card(s)"
                 cards = [self[ix] for ix in indexes]
                 if playing_faceup:
-                    assert len(set(cards)) == 1, "If selecting multiple cards, they must be the same"
+                    assert (
+                        len(set(cards)) == 1
+                    ), "If selecting multiple cards, they must be the same"
                     assert not (
                         len(cards) > 1 and cards[0].extra_turns
                     ), f"You can only play one {cards[0]} at a time"
@@ -174,7 +174,7 @@ class Deck(Cards):
     """A deck of cards that can deal and shuffle."""
 
     def __init__(self):
-        super().__init__(Card(value) for value, num in LARGE.items() for _ in range(num))
+        super().__init__(Card(value) for value, num in SMALL.items() for _ in range(num))
         self.shuffle()
 
     def shuffle(self):

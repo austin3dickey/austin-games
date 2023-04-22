@@ -1,6 +1,6 @@
-import argparse
 import collections
-from typing import Optional, Tuple
+import textwrap
+from typing import Dict, Optional, Tuple
 
 from websockets.exceptions import ConnectionClosed
 
@@ -105,12 +105,13 @@ class Player:
             else self.three_down
         )
 
-        return f"""{player_name}
-{'~' * len(player_name)}
-{player_name}'s hand: {hand}
-{player_name}'s 3up: {self.three_up}
-{player_name}'s 3dn: {three_down}
-        """
+        return (
+            f"{player_name}\n"
+            f"{'~' * len(player_name)}\n"
+            f"{player_name}'s hand: {hand}\n"
+            f"{player_name}'s 3up: {self.three_up}\n"
+            f"{player_name}'s 3dn: {three_down}\n"
+        )
 
 
 class TurnLog(collections.deque):
@@ -139,7 +140,7 @@ class Game:
         """Reset the game to a new game state"""
         self.is_playing = False
         self.current_turn = ""
-        self.players = {}
+        self.players: Dict[str, Player] = {}
         self.deck = Deck()
         self.discard = Discard()
         self.turn_log = TurnLog([], self.TURN_LOG_LENGTH)
@@ -175,20 +176,17 @@ class Game:
             for name, player in players
         )
 
-        return f"""
-{self.current_turn}'s turn!
-
-Draw pile: {self.deck}
-Discard pile: {self.discard}
-
-{player_descriptions}
-
-{self.turn_log}
-                """
+        return (
+            f"{self.current_turn}'s turn!\n\n"
+            f"Draw pile: {self.deck}\n"
+            f"Discard pile: {self.discard}\n\n"
+            f"{player_descriptions}\n\n"
+            f"{self.turn_log}"
+        )
 
     async def broadcast(self, func_name: str, *args, **kwargs):
         """Send a message to all players
-        
+
         Args:
             func_name: Name of the comms method to call
             args, kwargs: Arguments to the method
