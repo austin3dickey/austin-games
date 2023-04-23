@@ -7,7 +7,6 @@ from fastapi.staticfiles import StaticFiles
 from austingames.threeupthreedown.communication import Communicator
 from austingames.threeupthreedown.game import Game
 
-
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -15,13 +14,13 @@ game = Game()
 
 
 @app.get("/", response_class=HTMLResponse)
-async def get():
-    with open("threeupthreedown.html", "r") as f:
+async def get() -> str:
+    with open("threeupthreedown.html") as f:
         return f.read()
 
 
 @app.websocket("/ws/{player_name}")
-async def websocket_endpoint(websocket: WebSocket, player_name: str):
+async def websocket_endpoint(websocket: WebSocket, player_name: str) -> None:
     await websocket.accept()
     comms = Communicator(websocket)
 
@@ -46,7 +45,8 @@ async def websocket_endpoint(websocket: WebSocket, player_name: str):
 
         game.add_player(name=player_name, is_vip=is_vip, comms=comms)
         current_players = "\n".join(
-            name + " (VIP)" if player.is_vip else name for name, player in game.players.items()
+            name + " (VIP)" if player.is_vip else name
+            for name, player in game.players.items()
         )
 
         for player in game.players.values():
@@ -60,7 +60,9 @@ async def websocket_endpoint(websocket: WebSocket, player_name: str):
             await comms.update_prompt("")
             win_msg = await game.play()
             for player in game.players.values():
-                await player.comms.update_prompt(win_msg + " Refresh page to start again :)")
+                await player.comms.update_prompt(
+                    win_msg + " Refresh page to start again :)"
+                )
             game.reset_game()
         else:
             while True:

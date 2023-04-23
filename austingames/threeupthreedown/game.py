@@ -1,8 +1,4 @@
 import collections
-import textwrap
-from typing import Dict, Optional, Tuple
-
-from websockets.exceptions import ConnectionClosed
 
 from .cards import Card, Cards, Deck, Discard, ThreeDown
 from .communication import Communicator
@@ -11,7 +7,7 @@ from .communication import Communicator
 class Player:
     """A player of the game."""
 
-    def __init__(self, is_vip: bool, comms: Communicator):
+    def __init__(self, is_vip: bool, comms: Communicator) -> None:
         """
         Args:
             is_vip: Whether they're the first player to join
@@ -23,7 +19,7 @@ class Player:
         self.three_up = Cards()
         self.three_down = ThreeDown()
 
-    async def place_three_up(self):
+    async def place_three_up(self) -> None:
         """Before the game starts, choose cards to be your 3up"""
         cards = await self.hand.choose(
             comms=self.comms,
@@ -33,9 +29,12 @@ class Player:
             playing_faceup=False,
             min_card=None,
         )
+        assert cards
         self.three_up += cards
 
-    async def take_turn(self, top_discard_card: Card) -> Tuple[Optional[Cards], str]:
+    async def take_turn(
+        self, top_discard_card: Card | None
+    ) -> tuple[Cards | None, str]:
         """Take a turn from one of your piles of cards.
 
         Args:
@@ -78,7 +77,7 @@ class Player:
 
         return cards, location
 
-    def add_to_hand(self, cards: Cards):
+    def add_to_hand(self, cards: Cards) -> None:
         """Add cards to your hand and sort them if your hand is too big
 
         Args:
@@ -98,9 +97,13 @@ class Player:
         Returns:
             A string to display
         """
-        hand = self.hand.display(hide_indexes=range(len(self.hand))) if hide_hand else self.hand
+        hand = (
+            self.hand.display(hide_indexes=list(range(len(self.hand))))
+            if hide_hand
+            else self.hand
+        )
         three_down = (
-            self.three_down.display(hide_indexes=range(len(self.three_down)))
+            self.three_down.display(hide_indexes=list(range(len(self.three_down))))
             if hide_hand
             else self.three_down
         )
@@ -114,7 +117,7 @@ class Player:
         )
 
 
-class TurnLog(collections.deque):
+class TurnLog(collections.deque[str]):
     """A log of what happened in the last few turns"""
 
     def __str__(self) -> str:
@@ -133,19 +136,19 @@ class Game:
 
     TURN_LOG_LENGTH = 10
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.reset_game()
 
-    def reset_game(self):
+    def reset_game(self) -> None:
         """Reset the game to a new game state"""
         self.is_playing = False
         self.current_turn = ""
-        self.players: Dict[str, Player] = {}
+        self.players: dict[str, Player] = {}
         self.deck = Deck()
         self.discard = Discard()
         self.turn_log = TurnLog([], self.TURN_LOG_LENGTH)
 
-    def add_player(self, name: str, is_vip: bool, comms: Communicator):
+    def add_player(self, name: str, is_vip: bool, comms: Communicator) -> None:
         """
         Add a player to the game before it starts
 
@@ -169,7 +172,9 @@ class Game:
         """
         # put the current player on top
         players = [(player_name, self.players[player_name])] + [
-            (name, player) for name, player in self.players.items() if name != player_name
+            (name, player)
+            for name, player in self.players.items()
+            if name != player_name
         ]
         player_descriptions = "\n".join(
             player.display(player_name=name, hide_hand=name != player_name)
@@ -184,31 +189,20 @@ class Game:
             f"{self.turn_log}"
         )
 
-    async def broadcast(self, func_name: str, *args, **kwargs):
-        """Send a message to all players
-
-        Args:
-            func_name: Name of the comms method to call
-            args, kwargs: Arguments to the method
-        """
-        for player in self.players.values():
-            try:
-                await getattr(player.comms, func_name)(*args, **kwargs)
-            except ConnectionClosed:
-                pass
-
-    async def broadcast_board(self):
+    async def broadcast_board(self) -> None:
         """Broadcast the views of the board to all players"""
         for player_name, player in self.players.items():
             await player.comms.update_board(self.board_view(player_name))
 
-    async def broadcast_waiting_prompt(self):
+    async def broadcast_waiting_prompt(self) -> None:
         """Broadcast the waiting prompt to all players whose turn it isn't"""
         for player_name, player in self.players.items():
             if player_name != self.current_turn:
-                await player.comms.update_prompt(f"Waiting for {self.current_turn} to play")
+                await player.comms.update_prompt(
+                    f"Waiting for {self.current_turn} to play"
+                )
 
-    async def everyone_place_three_up(self):
+    async def everyone_place_three_up(self) -> None:
         """Before the game starts, everyone go around and place their 3up cards"""
         for player_name, player in self.players.items():
             self.current_turn = player_name
@@ -216,7 +210,7 @@ class Game:
             await self.broadcast_waiting_prompt()
             await player.place_three_up()
 
-    async def everyone_take_a_turn(self) -> Optional[str]:
+    async def everyone_take_a_turn(self) -> str | None:
         """Everyone go around and take a turn
 
         Returns:
@@ -256,7 +250,9 @@ class Game:
                     # The player has to pick up the discard pile
                     player.add_to_hand(self.discard)
                     self.discard.clear()
-                    self.turn_log.appendleft(f"{player_name} picked up the discard pile")
+                    self.turn_log.appendleft(
+                        f"{player_name} picked up the discard pile"
+                    )
         # no one won yet
         return None
 

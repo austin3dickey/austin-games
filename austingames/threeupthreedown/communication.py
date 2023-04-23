@@ -1,5 +1,5 @@
 import json
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from fastapi import WebSocket
 
@@ -17,12 +17,12 @@ class Communicator:
         """
         self.websocket = websocket
 
-    async def send(self, stuff: dict):
+    async def send(self, stuff: dict[str, str | list[str]]) -> None:
         """Send something with debug printing."""
         print(f"sending {stuff}")
         await self.websocket.send_json(stuff)
 
-    async def update_prompt(self, msg: str):
+    async def update_prompt(self, msg: str) -> None:
         """Update the prompt section of the client
 
         Args:
@@ -30,7 +30,7 @@ class Communicator:
         """
         await self.send({"target": "prompt", "text": msg})
 
-    async def update_board(self, msg: str):
+    async def update_board(self, msg: str) -> None:
         """Update the board section of the client
 
         Args:
@@ -38,15 +38,15 @@ class Communicator:
         """
         await self.send({"target": "board", "text": msg})
 
-    async def enable_vip_form(self):
+    async def enable_vip_form(self) -> None:
         """Enable the VIP form"""
         await self.send({"target": "enable_vip_form"})
 
-    async def enable_card_form(self):
+    async def enable_card_form(self) -> None:
         """Enable the card form"""
         await self.send({"target": "enable_card_form"})
 
-    async def populate_cards(self, cards: "Cards"):
+    async def populate_cards(self, cards: "Cards") -> None:
         """Populate the card form
 
         Args:
@@ -59,7 +59,7 @@ class Communicator:
             }
         )
 
-    async def receive_card_indexes(self) -> List[int]:
+    async def receive_card_indexes(self) -> list[int]:
         """Receive card indexes from the client
 
         Returns:
@@ -67,4 +67,5 @@ class Communicator:
         """
         data = await self.websocket.receive_text()
         print(f"received {data}")
-        return json.loads(f"[{data}]")
+        deser: list[int] = json.loads(f"[{data}]")
+        return deser

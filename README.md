@@ -10,7 +10,7 @@ A fast-paced Uno-type card game.
 
 ## Setting up the server
 
-    conda create -yn austingames python=3.9
+    conda create -yn austingames python>=3.11
     conda activate austingames
     pip install -r requirements.txt
     ./startup.sh
@@ -20,3 +20,9 @@ replacing `localhost` with your computer's local IP address.
 
 You'll need to port forward port 80 for people outside your wifi to log in. Change the websocket
 URI in the HTML file to your public IP address.
+
+## Developing
+
+    conda activate austingames
+    pip install -r requirements-dev.txt
+    pre-commit install

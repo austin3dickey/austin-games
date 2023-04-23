@@ -1,19 +1,61 @@
 import asyncio
 import random
-from typing import List, Optional, Union
+from collections.abc import Iterable
+from typing import Any, Optional
 
 from .communication import Communicator
 
-
-SMALL = {1: 3, 2: 3, 3: 3, 4: 3, 5: 3, 6: 3, 7: 3, 8: 3, 9: 3, 10: 3, "C": 3, "C+1": 2, "C+2": 1}
-MEDIUM = {1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 5, 7: 5, 8: 5, 9: 5, 10: 5, "C": 5, "C+1": 4, "C+2": 1}
-LARGE = {1: 7, 2: 7, 7: 7, 4: 7, 5: 7, 6: 7, 7: 7, 8: 7, 9: 7, 10: 7, "C": 7, "C+1": 6, "C+2": 1}
+SMALL: dict[int | str, int] = {
+    1: 3,
+    2: 3,
+    3: 3,
+    4: 3,
+    5: 3,
+    6: 3,
+    7: 3,
+    8: 3,
+    9: 3,
+    10: 3,
+    "C": 3,
+    "C+1": 2,
+    "C+2": 1,
+}
+MEDIUM: dict[int | str, int] = {
+    1: 5,
+    2: 5,
+    3: 5,
+    4: 5,
+    5: 5,
+    6: 5,
+    7: 5,
+    8: 5,
+    9: 5,
+    10: 5,
+    "C": 5,
+    "C+1": 4,
+    "C+2": 1,
+}
+LARGE: dict[int | str, int] = {
+    1: 7,
+    2: 7,
+    7: 7,
+    4: 7,
+    5: 7,
+    6: 7,
+    7: 7,
+    8: 7,
+    9: 7,
+    10: 7,
+    "C": 7,
+    "C+1": 6,
+    "C+2": 1,
+}
 
 
 class Card:
     """A card."""
 
-    def __init__(self, value: Union[int, str]):
+    def __init__(self, value: int | str):
         """
         Args:
             value: The value of the card.
@@ -36,21 +78,24 @@ class Card:
             return 0
 
     def __ge__(self, other: "Card") -> bool:
-        try:
+        if isinstance(self.value, int) and isinstance(other.value, int):
             return self.value >= other.value
-        except TypeError:
+        else:
             # clear cards are always higher
             return self.is_clear
 
     def __lt__(self, other: "Card") -> bool:
-        try:
+        if isinstance(self.value, int) and isinstance(other.value, int):
             return self.value < other.value
-        except TypeError:
+        else:
             # clear cards are always higher
             return other.is_clear
 
-    def __eq__(self, other: "Card") -> bool:
-        return self.value == other.value
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Card):
+            return self.value == other.value
+        else:
+            return False
 
     def __hash__(self) -> int:
         return hash(self.value)
@@ -59,8 +104,10 @@ class Card:
         return f"[\u00A0{self.value}\u00A0]"
 
 
-class Cards(list):
+class Cards(list[Card]):
     """A pile of cards."""
+
+    hidden_indexes: list[int]
 
     async def choose(
         self,
@@ -69,7 +116,7 @@ class Cards(list):
         min_num: int,
         max_num: int,
         playing_faceup: bool,
-        min_card: Optional[Card],
+        min_card: Card | None,
     ) -> Optional["Cards"]:
         """Ask for the cards to choose and validate they work before popping them out of the pile.
 
@@ -100,7 +147,9 @@ class Cards(list):
 
             # Make a bunch of assertions about the chosen cards
             try:
-                assert len(indexes) >= min_num, f"Must select at least {min_num} card(s)"
+                assert (
+                    len(indexes) >= min_num
+                ), f"Must select at least {min_num} card(s)"
                 assert len(indexes) <= max_num, f"Must select at most {max_num} card(s)"
                 cards = [self[ix] for ix in indexes]
                 if playing_faceup:
@@ -123,7 +172,9 @@ class Cards(list):
                                 f"than {min_card}! Picking up the discard pile...",
                             )
                             self.hidden_indexes = [
-                                ix for ix in self.hidden_indexes if ix != next(iter(indexes))
+                                ix
+                                for ix in self.hidden_indexes
+                                if ix != next(iter(indexes))
                             ]
                             await asyncio.sleep(2)
                             await comms.update_prompt("")
@@ -138,7 +189,7 @@ class Cards(list):
         await comms.update_prompt("")
         return Cards(self.pop(ix) for ix in sorted(indexes, reverse=True))
 
-    def display(self, hide_indexes: List[int]) -> str:
+    def display(self, hide_indexes: list[int]) -> str:
         """Display the cards. Some could be facedown.
 
         Args:
@@ -154,7 +205,7 @@ class Cards(list):
         else:
             return " ".join(self.display_list(hide_indexes))
 
-    def display_list(self, hide_indexes: List[int]) -> List[str]:
+    def display_list(self, hide_indexes: list[int]) -> list[str]:
         """Render the cards into a list of strings. Some could be facedown.
 
         Args:
@@ -163,7 +214,9 @@ class Cards(list):
         Returns:
             A list of string representations of the cards
         """
-        return ["[~]" if ix in hide_indexes else str(card) for ix, card in enumerate(self)]
+        return [
+            "[~]" if ix in hide_indexes else str(card) for ix, card in enumerate(self)
+        ]
 
     def __str__(self) -> str:
         # display all cards faceup
@@ -173,11 +226,13 @@ class Cards(list):
 class Deck(Cards):
     """A deck of cards that can deal and shuffle."""
 
-    def __init__(self):
-        super().__init__(Card(value) for value, num in SMALL.items() for _ in range(num))
+    def __init__(self) -> None:
+        super().__init__(
+            Card(value) for value, num in SMALL.items() for _ in range(num)
+        )
         self.shuffle()
 
-    def shuffle(self):
+    def shuffle(self) -> None:
         """Shuffle the deck in-place."""
         random.shuffle(self)
 
@@ -190,17 +245,19 @@ class Deck(Cards):
         Returns:
             The cards dealt
         """
-        return [self.pop() for _ in range(n)]
+        return Cards(self.pop() for _ in range(n))
 
     def __str__(self) -> str:
         # display all cards facedown
-        return self.display(hide_indexes=range(len(self)))
+        return self.display(hide_indexes=list(range(len(self))))
 
 
 class Discard(Cards):
     """The discard pile. Clears when a clear or 3 identical cards in a row are played."""
 
-    def __iadd__(self, cards: Cards) -> "Discard":
+    def __iadd__(self, cards: Iterable[Any]) -> "Discard":  # type: ignore[override, misc]
+        if not isinstance(cards, Cards):
+            raise ValueError
         new = self + list(cards)
         if new[-1].is_clear or (len(new) >= 3 and len(set(new[-3:])) == 1):
             # clear the discard
@@ -220,11 +277,11 @@ class Discard(Cards):
 class ThreeDown(Cards):
     """3 cards, some of which may be unknown"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.hidden_indexes = [0, 1, 2]
 
-    def pop(self, index: int) -> Card:
+    def pop(self, index: int) -> Card:  # type: ignore[override]
         self.hidden_indexes = [
             ix if ix < index else ix - 1 for ix in self.hidden_indexes if ix != index
         ]
